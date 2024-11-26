@@ -26,7 +26,7 @@ export const SUPPORTED_FORMATS = {
   'audio/mpeg': ['.wav', '.ogg', '.m4a'],
   'audio/wav': ['.mp3', '.ogg', '.m4a'],
   'audio/ogg': ['.mp3', '.wav', '.m4a'],
-  'application/pdf': ['.docx', '.md', '.txt', '.jpg', '.png'],
+  'application/pdf': ['.docx', '.md', '.txt'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.pdf', '.md', '.txt'],
   'text/markdown': ['.pdf', '.docx', '.txt'],
   'text/plain': ['.pdf', '.docx', '.md'],

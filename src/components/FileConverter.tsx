@@ -34,7 +34,7 @@ export default function FileConverter() {
           preserveMetadata,
           compressionLevel,
         },
-      }));
+      })) as ConversionJob[];
 
       setJobs((prev) => [...prev, ...newJobs]);
       toast.success(`Added ${acceptedFiles.length} file(s)`);
@@ -102,7 +102,6 @@ export default function FileConverter() {
           )
         );
 
-        // Update statistics after successful conversion
         updateStatistics(job.file.size);
 
         const url = URL.createObjectURL(result);

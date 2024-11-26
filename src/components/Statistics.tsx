@@ -43,8 +43,8 @@ export default function Statistics() {
             <FileCheck className="w-6 h-6 text-amber-500" />
           </div>
           <div>
-            <p className="text-sm text-gray-400">Total Conversions</p>
-            <p className="text-2xl font-bold">
+            <p className="text-md font-bold">Total Conversions</p>
+            <p className="text-sm text-gray-400">
               {stats.totalConversions.toLocaleString()}
             </p>
           </div>
@@ -55,8 +55,8 @@ export default function Statistics() {
             <HardDrive className="w-6 h-6 text-amber-500" />
           </div>
           <div>
-            <p className="text-sm text-gray-400">Total Size Processed</p>
-            <p className="text-2xl font-bold">
+            <p className="text-md font-bold">Total Size Processed</p>
+            <p className="text-sm text-gray-400">
               {formatFileSize(stats.totalSize)}
             </p>
           </div>
@@ -67,8 +67,8 @@ export default function Statistics() {
             <Clock className="w-6 h-6 text-amber-500" />
           </div>
           <div>
-            <p className="text-sm text-gray-400">Last Conversion</p>
-            <p className="text-2xl font-bold">
+            <p className="text-md font-bold">Last Conversion</p>
+            <p className="text-sm text-gray-400">
               {formatDate(stats.lastConversion)}
             </p>
           </div>

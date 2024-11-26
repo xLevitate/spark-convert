@@ -1,4 +1,4 @@
-import { Heart, CreditCard } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const DONATION_LINKS = [
