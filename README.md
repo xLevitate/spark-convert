@@ -1,7 +1,4 @@
 # SparkConvert - Free Online File Converter
-
-![SparkConvert Banner](https://images.unsplash.com/photo-1618609378039-b572f64c5b42?auto=format&fit=crop&q=80&w=2000&h=600)
-
 SparkConvert is a free, open-source file converter that runs entirely in your browser. Convert images, videos, audio files, and documents without uploading them to any server. Your files stay private and secure on your device.
 
 ## ✨ Features
