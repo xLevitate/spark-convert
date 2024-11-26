@@ -1,8 +1,11 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import FileConverter from './components/FileConverter';
 import DonationPage from './components/DonationPage';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfUse from './components/TermsOfUse';
 import { Sparkles, Shield, Zap } from 'lucide-react';
 
 function HomePage() {
@@ -62,6 +65,8 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/donate" element={<DonationPage />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfUse />} />
         </Routes>
         <Footer />
       </div>

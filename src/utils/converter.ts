@@ -1,60 +1,78 @@
 import imageCompression from 'browser-image-compression';
 import { PDFDocument, PageSizes } from 'pdf-lib';
-import { Document, Packer } from 'docx';
+import { Document, Packer, Paragraph } from 'docx';
 import { marked } from 'marked';
 import mammoth from 'mammoth';
+import { ConversionSettings } from '../types/converter';
 
-// Lazy load FFmpeg
-const FFmpegPromise = () => import('@ffmpeg/ffmpeg').then(m => m.FFmpeg);
-const FFmpegUtilPromise = () => import('@ffmpeg/util').then(m => ({ toBlobURL: m.toBlobURL, fetchFile: m.fetchFile }));
+// Lazy load FFmpeg with proper error handling
+const loadFFmpeg = async () => {
+  try {
+    const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
+      import('@ffmpeg/ffmpeg'),
+      import('@ffmpeg/util')
+    ]);
 
-let ffmpeg: any = null;
+    const ffmpeg = new FFmpeg();
+    
+    const baseURL = 'https://unpkg.com/@ffmpeg';
+    const coreURL = await toBlobURL(
+      `${baseURL}/core@0.12.6/dist/umd/ffmpeg-core.wasm`,
+      'application/wasm'
+    );
+    
+    await ffmpeg.load({
+      coreURL,
+      wasmURL: `${baseURL}/core@0.12.6/dist/umd/ffmpeg-core.wasm`,
+    });
+
+    return ffmpeg;
+  } catch (error) {
+    console.error('Failed to load FFmpeg:', error);
+    throw new Error('Failed to initialize video converter');
+  }
+};
+
+// Memoize FFmpeg instance
+let ffmpegInstance: any = null;
 
 async function getFFmpeg() {
-  if (ffmpeg) return ffmpeg;
-
-  const [FFmpeg, { toBlobURL }] = await Promise.all([
-    FFmpegPromise(),
-    FFmpegUtilPromise()
-  ]);
-
-  ffmpeg = new FFmpeg();
-  
-  const baseURL = 'https://unpkg.com/@ffmpeg';
-  const coreURL = await toBlobURL(
-    `${baseURL}/core@0.12.6/dist/umd/ffmpeg-core.wasm`,
-    'application/wasm'
-  );
-  
-  await ffmpeg.load({
-    coreURL,
-    wasmURL: `${baseURL}/core@0.12.6/dist/umd/ffmpeg-core.wasm`,
-  });
-
-  return ffmpeg;
+  if (!ffmpegInstance) {
+    ffmpegInstance = await loadFFmpeg();
+  }
+  return ffmpegInstance;
 }
 
 export async function convertFile(
-file: File, targetFormat: string, onProgress: (progress: number) => void, settings: (file: File, targetFormat: string, arg2: (progress: number) => void, settings: any) => unknown): Promise<Blob> {  
-  if (file.type.startsWith('image/')) {
-    if (targetFormat === '.pdf') {
-      return await convertImageToPdf(file);
+  file: File,
+  targetFormat: string,
+  onProgress: (progress: number) => void,
+  settings: ConversionSettings
+): Promise<Blob> {
+  try {
+    if (file.type.startsWith('image/')) {
+      if (targetFormat === '.pdf') {
+        return await convertImageToPdf(file);
+      }
+      return await convertImage(file, targetFormat, settings);
     }
-    return await convertImage(file, targetFormat);
+    
+    if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
+      return await convertMediaFile(file, targetFormat, onProgress, settings);
+    }
+    
+    if (file.type === 'application/pdf' || 
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.type === 'text/markdown' ||
+        file.type === 'text/plain') {
+      return await convertDocument(file, targetFormat, settings);
+    }
+    
+    throw new Error('Unsupported file type');
+  } catch (error) {
+    console.error('Conversion error:', error);
+    throw error;
   }
-  
-  if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
-    return await convertMediaFile(file, targetFormat, onProgress);
-  }
-  
-  if (file.type === 'application/pdf' || 
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      file.type === 'text/markdown' ||
-      file.type === 'text/plain') {
-    return await convertDocument(file, targetFormat);
-  }
-  
-  throw new Error('Unsupported file type');
 }
 
 async function convertImageToPdf(file: File): Promise<Blob> {
@@ -67,7 +85,6 @@ async function convertImageToPdf(file: File): Promise<Blob> {
   } else if (file.type === 'image/png') {
     image = await pdfDoc.embedPng(imageBytes);
   } else {
-    // For other formats, convert to PNG first
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
     const img = new Image();
@@ -90,7 +107,7 @@ async function convertImageToPdf(file: File): Promise<Blob> {
   const { width, height } = page.getSize();
   const aspectRatio = image.width / image.height;
   
-  let imageWidth = width - 40; // 20pt padding on each side
+  let imageWidth = width - 40;
   let imageHeight = imageWidth / aspectRatio;
   
   if (imageHeight > height - 40) {
@@ -109,7 +126,11 @@ async function convertImageToPdf(file: File): Promise<Blob> {
   return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
-async function convertImage(file: File, targetFormat: string): Promise<Blob> {
+async function convertImage(
+  file: File,
+  targetFormat: string,
+  settings: ConversionSettings
+): Promise<Blob> {
   if (targetFormat === '.svg') {
     throw new Error('SVG conversion not supported yet');
   }
@@ -118,6 +139,11 @@ async function convertImage(file: File, targetFormat: string): Promise<Blob> {
     maxSizeMB: 1,
     maxWidthOrHeight: 1920,
     useWebWorker: true,
+    preserveExif: settings.preserveMetadata,
+    initialQuality: settings.compressionLevel === 'none' ? 1.0 :
+                   settings.compressionLevel === 'low' ? 0.8 :
+                   settings.compressionLevel === 'medium' ? 0.6 :
+                   0.4
   };
 
   const compressedFile = await imageCompression(file, options);
@@ -125,9 +151,10 @@ async function convertImage(file: File, targetFormat: string): Promise<Blob> {
 }
 
 async function convertMediaFile(
-  file: File, 
+  file: File,
   targetFormat: string,
-  onProgress: (progress: number) => void
+  onProgress: (progress: number) => void,
+  settings: ConversionSettings
 ): Promise<Blob> {
   const ffmpeg = await getFFmpeg();
   const inputFileName = 'input' + getExtensionFromType(file.type);
@@ -140,49 +167,137 @@ async function convertMediaFile(
   const arrayBuffer = await file.arrayBuffer();
   await ffmpeg.writeFile(inputFileName, new Uint8Array(arrayBuffer));
   
-  await ffmpeg.exec(['-i', inputFileName, outputFileName]);
+  const ffmpegArgs = ['-i', inputFileName];
+  
+  // Apply compression settings
+  if (settings.compressionLevel !== 'none') {
+    if (file.type.startsWith('video/')) {
+      const crf = settings.compressionLevel === 'low' ? '23' :
+                 settings.compressionLevel === 'medium' ? '28' :
+                 '33';
+      ffmpegArgs.push('-crf', crf);
+    } else if (file.type.startsWith('audio/')) {
+      const bitrate = settings.compressionLevel === 'low' ? '192k' :
+                     settings.compressionLevel === 'medium' ? '128k' :
+                     '96k';
+      ffmpegArgs.push('-b:a', bitrate);
+    }
+  }
+  
+  // Preserve metadata if requested
+  if (!settings.preserveMetadata) {
+    ffmpegArgs.push('-map_metadata', '-1');
+  }
+  
+  ffmpegArgs.push(outputFileName);
+  await ffmpeg.exec(ffmpegArgs);
   
   const data = await ffmpeg.readFile(outputFileName);
   return new Blob([data], { type: getTypeFromExtension(targetFormat) });
 }
 
-async function convertDocument(file: File, targetFormat: string): Promise<Blob> {
+async function convertDocument(
+  file: File,
+  targetFormat: string,
+  settings: ConversionSettings
+): Promise<Blob> {
   const arrayBuffer = await file.arrayBuffer();
   
   if (file.type === 'application/pdf') {
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
     
     if (targetFormat === '.docx') {
-      // PDF to DOCX conversion
       const doc = new Document({
         sections: [{
           properties: {},
-          children: []
-        }]
+          children: [
+            new Paragraph({
+              text: 'PDF content conversion is not fully supported yet.',
+              style: 'Normal',
+            }),
+          ],
+        }],
       });
-      // Add PDF content to DOCX
-      const pdfBytes = await Packer.toBuffer(doc);
-      return new Blob([pdfBytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const docxBuffer = await Packer.toBuffer(doc);
+      return new Blob([docxBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
+    }
+    
+    if (targetFormat === '.txt' || targetFormat === '.md') {
+      // Basic PDF text extraction
+      const text = 'PDF text extraction is not fully supported yet.';
+      return new Blob([text], { 
+        type: targetFormat === '.md' ? 'text/markdown' : 'text/plain' 
+      });
     }
   }
   
   if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const result = await mammoth.extractRawText({ arrayBuffer });
     
-    if (targetFormat === '.md') {
-      return new Blob([result.value], { type: 'text/markdown' });
+    if (targetFormat === '.md' || targetFormat === '.txt') {
+      return new Blob([result.value], { 
+        type: targetFormat === '.md' ? 'text/markdown' : 'text/plain' 
+      });
     }
-  }
-  
-  if (file.type === 'text/markdown') {
-    const text = new TextDecoder().decode(arrayBuffer);
-    const html = marked(text);
     
     if (targetFormat === '.pdf') {
       const pdfDoc = await PDFDocument.create();
       const page = pdfDoc.addPage();
-      page.drawText(await Promise.resolve(html).then(h => h.replace(/<[^>]*>/g, '')));
+      const { width, height } = page.getSize();
+      const fontSize = 12;
+      const lineHeight = fontSize * 1.2;
+      const margin = 50;
+      
+      const lines = result.value.split('\n');
+      let y = height - margin;
+      
+      for (const line of lines) {
+        if (y < margin) {
+          y = height - margin;
+          page.drawText(line, {
+            x: margin,
+            y,
+            size: fontSize,
+          });
+        }
+        y -= lineHeight;
+      }
+      
       const pdfBytes = await pdfDoc.save();
       return new Blob([pdfBytes], { type: 'application/pdf' });
+    }
+  }
+  
+  if (file.type === 'text/markdown' || file.type === 'text/plain') {
+    const text = new TextDecoder().decode(arrayBuffer);
+    
+    if (file.type === 'text/markdown' && targetFormat === '.pdf') {
+      const html = marked(text);
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage();
+      const plainText = await Promise.resolve(html).then(h => h.replace(/<[^>]*>/g, ''));
+      page.drawText(plainText);
+      const pdfBytes = await pdfDoc.save();
+      return new Blob([pdfBytes], { type: 'application/pdf' });
+    }
+    if (targetFormat === '.docx') {
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            new Paragraph({
+              text: text,
+              style: 'Normal',
+            }),
+          ],
+        }],
+      });
+      const docxBuffer = await Packer.toBuffer(doc);
+      return new Blob([docxBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
     }
   }
   

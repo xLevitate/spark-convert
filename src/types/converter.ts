@@ -1,5 +1,9 @@
+export interface ConversionSettings {
+  preserveMetadata: boolean;
+  compressionLevel: 'none' | 'low' | 'medium' | 'high';
+}
+
 export interface ConversionJob {
-  settings(file: File, targetFormat: string, arg2: (progress: number) => void, settings: any): unknown;
   id: string;
   file: File;
   targetFormat: string;
@@ -7,6 +11,7 @@ export interface ConversionJob {
   progress: number;
   error?: string;
   result?: Blob;
+  settings: ConversionSettings;
 }
 
 export const SUPPORTED_FORMATS = {
