@@ -79,7 +79,7 @@ If you find SparkConvert useful, please consider supporting the project:
 
 ## 🔗 Links
 
-- [Website](https://sparkconvert.com)
+- [Website](https://sparkconvert.xyz)
 - [Documentation](https://github.com/xLevitate/spark-convert/wiki)
 - [Report Bug](https://github.com/xLevitate/spark-convert/issues)
 - [Request Feature](https://github.com/xLevitate/spark-convert/issues)
