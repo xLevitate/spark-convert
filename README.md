@@ -1,4 +1,7 @@
 # SparkConvert - Free Online File Converter
+
+[![Netlify Status](https://api.netlify.com/api/v1/badges/6a7f479a-ec4e-4cef-859a-d38743f5a7f0/deploy-status)](https://app.netlify.com/sites/sparkconvert/deploys)
+
 SparkConvert is a free, open-source file converter that runs entirely in your browser. Convert images, videos, audio files, and documents without uploading them to any server. Your files stay private and secure on your device.
 
 ## ✨ Features
