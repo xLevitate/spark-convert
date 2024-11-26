@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, Settings, Info } from 'lucide-react';
 import { ConversionJob, SUPPORTED_FORMATS } from '../types/converter';
 import { convertFile } from '../utils/converter';
+import { updateStatistics } from '../utils/statistics';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import SettingsModal from './SettingsModal';
@@ -16,27 +17,30 @@ export default function FileConverter() {
   const [preserveMetadata, setPreserveMetadata] = useState(true);
   const [compressionLevel, setCompressionLevel] = useState('medium');
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 10) {
-      toast.error('Maximum 10 files allowed at once');
-      acceptedFiles = acceptedFiles.slice(0, 10);
-    }
-
-    const newJobs = acceptedFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      targetFormat: '',
-      status: 'pending' as const,
-      progress: 0,
-      settings: {
-        preserveMetadata,
-        compressionLevel,
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length > 10) {
+        toast.error('Maximum 10 files allowed at once');
+        acceptedFiles = acceptedFiles.slice(0, 10);
       }
-    }));
 
-    setJobs((prev) => [...prev, ...newJobs as unknown as ConversionJob[]]);
-    toast.success(`Added ${acceptedFiles.length} file(s)`);
-  }, [preserveMetadata, compressionLevel]);
+      const newJobs = acceptedFiles.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        targetFormat: '',
+        status: 'pending' as const,
+        progress: 0,
+        settings: {
+          preserveMetadata,
+          compressionLevel,
+        },
+      }));
+
+      setJobs((prev) => [...prev, ...newJobs]);
+      toast.success(`Added ${acceptedFiles.length} file(s)`);
+    },
+    [preserveMetadata, compressionLevel]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -71,24 +75,22 @@ export default function FileConverter() {
       (job) => job.status === 'pending' && job.targetFormat
     );
 
-    const toastId = toast.loading(`Converting ${pendingJobs.length} file(s)...`);
+    const toastId = toast.loading(
+      `Converting ${pendingJobs.length} file(s)...`
+    );
 
     for (const job of pendingJobs) {
       setJobs((prev) =>
-        prev.map((j) =>
-          j.id === job.id ? { ...j, status: 'converting' } : j
-        )
+        prev.map((j) => (j.id === job.id ? { ...j, status: 'converting' } : j))
       );
 
       try {
         const result = await convertFile(
-          job.file, 
-          job.targetFormat, 
+          job.file,
+          job.targetFormat,
           (progress) => {
             setJobs((prev) =>
-              prev.map((j) =>
-                j.id === job.id ? { ...j, progress } : j
-              )
+              prev.map((j) => (j.id === job.id ? { ...j, progress } : j))
             );
           },
           job.settings
@@ -96,11 +98,12 @@ export default function FileConverter() {
 
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id
-              ? { ...j, status: 'completed', result }
-              : j
+            j.id === job.id ? { ...j, status: 'completed', result } : j
           )
         );
+
+        // Update statistics after successful conversion
+        updateStatistics(job.file.size);
 
         const url = URL.createObjectURL(result);
         const a = document.createElement('a');
@@ -129,13 +132,11 @@ export default function FileConverter() {
     (job) => job.status === 'pending' && job.targetFormat
   );
 
-  const hasCompletedJobs = jobs.some(
-    (job) => job.status === 'completed'
-  );
+  const hasCompletedJobs = jobs.some((job) => job.status === 'completed');
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-      <motion.div 
+      <motion.div
         className="glass-card rounded-xl p-8"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -143,7 +144,9 @@ export default function FileConverter() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
             <Info className="w-5 h-5 text-amber-500" />
-            <span className="text-sm text-gray-400">Maximum file size: 100MB</span>
+            <span className="text-sm text-gray-400">
+              Maximum file size: 100MB
+            </span>
           </div>
           <button
             onClick={() => setShowSettings(true)}
@@ -164,7 +167,7 @@ export default function FileConverter() {
             }`}
         >
           <input {...getInputProps()} />
-          <motion.div 
+          <motion.div
             className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4"
             animate={{ scale: isDragActive ? 1.1 : 1 }}
           >
@@ -178,7 +181,7 @@ export default function FileConverter() {
 
         <AnimatePresence>
           {jobs.length > 0 && (
-            <motion.div 
+            <motion.div
               className="mt-8 space-y-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -191,7 +194,11 @@ export default function FileConverter() {
                 totalJobs={jobs.length}
               />
 
-              <Suspense fallback={<div className="text-center">Loading converter...</div>}>
+              <Suspense
+                fallback={
+                  <div className="text-center">Loading converter...</div>
+                }
+              >
                 <ConversionList
                   jobs={jobs}
                   supportedFormats={SUPPORTED_FORMATS}
